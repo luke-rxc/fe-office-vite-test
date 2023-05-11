@@ -1,0 +1,85 @@
+import { ShowtimeRaffleEventDetailItemSchema, ShowtimeRaffleEventDetailSchema } from '../schemas';
+
+export const showtimeRaffleEventDetailSchemaMock: ShowtimeRaffleEventDetailSchema = {
+  id: 1,
+  name: '123',
+  itemList: [
+    {
+      id: 193,
+      sortNum: null,
+      enterDrawConditionType: 'FILE_UPLOAD',
+      winnerCount: 10,
+      goodsImage: null,
+      goodsMedia: {
+        id: 322448,
+        path: 'live/20230102/585bbbd2-fac2-4ba8-bdf7-65154516a7ae/original.mov',
+        extension: 'mov',
+        width: 0,
+        height: 0,
+        fileSize: 425478,
+        fileType: 'VIDEO',
+        thumbnailImage: null,
+      },
+      goodsMediaChromaKey: true,
+      status: 'STANDBY',
+    },
+    {
+      id: 194,
+      sortNum: null,
+      enterDrawConditionType: 'NONE',
+      winnerCount: null,
+      goodsImage: null,
+      goodsMedia: null,
+      goodsMediaChromaKey: null,
+      status: 'STANDBY',
+    },
+    {
+      id: 158,
+      sortNum: 0,
+      enterDrawConditionType: 'FILE_UPLOAD',
+      winnerCount: 10,
+      goodsImage: null,
+      goodsMedia: {
+        id: 322448,
+        path: 'live/20230102/585bbbd2-fac2-4ba8-bdf7-65154516a7ae/original.mov',
+        extension: 'mov',
+        width: 0,
+        height: 0,
+        fileSize: 425478,
+        fileType: 'VIDEO',
+        thumbnailImage: null,
+      },
+      goodsMediaChromaKey: true,
+      status: 'STANDBY',
+    },
+  ],
+};
+
+export const showtimeRaffleEventDetailItemSchemaMock: ShowtimeRaffleEventDetailItemSchema = {
+  id: 158,
+  sortNum: 0,
+  enterDrawConditionType: 'FILE_UPLOAD',
+  winnerCount: 1,
+  goodsImage: null,
+  goodsMedia: {
+    id: 322448,
+    path: 'live/20230102/585bbbd2-fac2-4ba8-bdf7-65154516a7ae/original.mov',
+    extension: 'mov',
+    width: 0,
+    height: 0,
+    fileSize: 425478,
+    fileType: 'VIDEO',
+    thumbnailImage: null,
+  },
+  goodsMediaChromaKey: true,
+  status: 'DRAW',
+  drawDate: 1672830012000,
+  enterDrawUserCount: 1,
+  winnerList: [
+    {
+      userId: 40,
+      nickname: 'kai_22',
+      email: 'kai@rxc.co.kr',
+    },
+  ],
+};

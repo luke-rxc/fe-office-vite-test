@@ -1,0 +1,286 @@
+# Continuous Deploy
+#
+# 브랜치별로 매핑된 환경에 빌드 및 배포를 진행합니다.
+name: Continuous Deploy
+
+on:
+  push:
+    branches:
+      - master
+      - stage
+      - develop
+    paths:
+      - 'environments/**'
+      - 'public/**'
+      - 'src/**'
+      - '.github/workflows/cd.yml'
+      - 'craco.config.js'
+      - 'package.json'
+      - 'tsconfig*.json'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    environment: ${{ fromJSON(vars.MAPPED_BRANCH_ENV)[github.ref_name] || 'dev' }}
+    outputs:
+      ENVIRONMENT: ${{ steps.vars.outputs.ENVIRONMENT }}
+      HEAD_COMMIT_MESSAGE: ${{ steps.vars.outputs.HEAD_COMMIT_MESSAGE }}
+      COMMITS: ${{ steps.vars.outputs.COMMITS }}
+      BY: ${{ steps.vars.outputs.BY }}
+      SLACK_TS: ${{ steps.slack.outputs.ts }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # 최근 커밋 로그를 가져오기 위한 depth 설정입니다.
+          fetch-depth: 0
+
+      - name: Set variables
+        id: vars
+        run: |
+          echo "ENVIRONMENT=${{ fromJSON(vars.MAPPED_BRANCH_ENV)[github.ref_name] || 'dev' }}" >> $GITHUB_OUTPUT
+
+          HEAD_COMMIT=$(git log -1 --format=%s --no-merges ${{ github.event.before}}..${{ github.event.after }})
+          echo "HEAD_COMMIT_MESSAGE=$HEAD_COMMIT" >> $GITHUB_OUTPUT
+
+          COMMITS=$(cat << EOF
+          $(git log -10 --format="\n> \`%h\` %s" --no-merges ${{ github.event.before}}..${{ github.event.after }} | sed -e 's/*//g')
+          EOF
+          )
+          echo COMMITS=$COMMITS >> $GITHUB_OUTPUT
+
+          echo "BY=${{ fromJson(vars.MEMBER_SLACK_IDS)[github.event.sender.login] }}" >> $GITHUB_OUTPUT
+
+      - name: Slack Message
+        id: slack
+        uses: slackapi/slack-github-action@v1
+        with:
+          channel-id: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "${{ vars.PLATFORM_TITLE }} Deployment - ${{ steps.vars.outputs.HEAD_COMMIT_MESSAGE }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ vars.DEPLOYMENT_EMOJI }} *<${{ github.event.repository.url }}|${{ vars.PLATFORM_TITLE }}>* Deployment \nDeploy to `${{ steps.vars.outputs.ENVIRONMENT }}`"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<${{ format('{0}/actions/runs/{1}', github.event.repository.url, github.run_id) }}|${{ github.workflow }} #${{ github.run_number }}> \n ${{ steps.vars.outputs.COMMITS }}"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "by: <@${{ steps.vars.outputs.BY }}>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ fromJSON(vars.MAPPED_BRANCH_ENV)[github.ref_name] || 'dev' }}
+    strategy:
+      matrix:
+        node: [16.x]
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v3
+
+      # Create Deployment
+      - name: Create GitHub deployment
+        uses: chrnorm/deployment-action@v2
+        id: deployment
+        with:
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          environment-url: ${{ vars.APP_BASE_URL }}
+          environment: ${{ needs.prepare.outputs.ENVIRONMENT }}
+
+      - name: Slack Reaction - Loading
+        uses: archive/github-actions-slack@v2.6.0
+        with:
+          slack-function: send-reaction
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-emoji-name: githubloading
+          slack-message-timestamp: ${{ needs.prepare.outputs.SLACK_TS }}
+
+      - name: Slack Thread Message - Starting a deployment
+        uses: archive/github-actions-slack@master
+        with:
+          slack-function: send-message
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-text: 'Starting a deployment..'
+          slack-optional-thread_ts: ${{ needs.prepare.outputs.SLACK_TS }}
+
+      - name: Use Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v3
+        with:
+          always-auth: true
+          node-version: ${{ matrix.node }}
+          registry-url: https://registry.npmjs.org
+
+      - name: Get yarn cache directory
+        if: vars.USE_CACHE_YN == 'Y'
+        id: yarn-cache-dir-path
+        run: echo dir=$(yarn cache dir) >> $GITHUB_OUTPUT
+
+      - name: Cache dependencies
+        if: vars.USE_CACHE_YN == 'Y'
+        uses: actions/cache@v3
+        id: yarn-cache
+        with:
+          path: |
+            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+            node_modules
+          key: ${{ runner.os }}-dependencies-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dependencies-
+            ${{ runner.os }}-
+
+      - name: Show yarn cache directory
+        run: echo "yarn cache directory is ${{ steps.yarn-cache-dir-path.outputs.dir }}"
+
+      - name: Install dependencies
+        if: |
+          vars.USE_CACHE_YN != 'Y' ||
+          steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile
+
+      - name: Slack Thread Message - Building
+        uses: archive/github-actions-slack@master
+        with:
+          slack-function: send-message
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-text: 'Building..'
+          slack-optional-thread_ts: ${{ needs.prepare.outputs.SLACK_TS }}
+
+      - name: Build
+        run: |
+          echo "::group::Run build"
+          if [ ${{ needs.prepare.outputs.ENVIRONMENT }} == "prod" ]; then
+            yarn run build
+          elif [ ${{ needs.prepare.outputs.ENVIRONMENT }} == "stage" ]; then
+            yarn run build:stage
+          elif [ ${{ needs.prepare.outputs.ENVIRONMENT }} == "canary" ]; then
+            yarn run build:canary
+          else
+            yarn run build:develop
+          fi
+          echo "::endgroup::"
+
+      - name: Slack Thread Message - Transferring..
+        uses: archive/github-actions-slack@master
+        with:
+          slack-function: send-message
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-text: 'Transferring..'
+          slack-optional-thread_ts: ${{ needs.prepare.outputs.SLACK_TS }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.FRONTEND_DEPLOY_AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.FRONTEND_DEPLOY_AWS_SECRET_KEY }}
+          aws-region: ap-northeast-2
+
+      # 매니저 오피스 배포
+      - name: Sync files to Manager-Office
+        run: |
+          BUCKET_NAME="rxc-${{ needs.prepare.outputs.ENVIRONMENT }}-web-manager-office"
+
+          echo "::group::Upload static files"
+          if [ ${{ needs.prepare.outputs.ENVIRONMENT }} == "prod" ]; then
+            aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.css" --include "*.js" --cache-control "max-age=604800"
+          else
+            aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.css" --include "*.js" --include "*.js.map" --cache-control "max-age=604800"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Upload assets"
+          aws s3 sync build s3://${BUCKET_NAME} --exclude "*.css" --exclude "*.js" --exclude "*.js.map" --exclude "*.html" --cache-control "max-age=604800"
+          echo "::endgroup::"
+
+          echo "::group::Upload html"
+          aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.html" --cache-control "max-age=180, stale-while-revalidate=300"
+          echo "::endgroup::"
+
+      # 파트너 오피스 배포
+      - name: Sync files to Partner-Office
+        run: |
+          BUCKET_NAME="rxc-${{ needs.prepare.outputs.ENVIRONMENT }}-web-partner-office"
+
+          echo "::group::Upload static files"
+          if [ ${{ needs.prepare.outputs.ENVIRONMENT }} == "prod" ]; then
+            aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.css" --include "*.js" --cache-control "max-age=604800"
+          else
+            aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.css" --include "*.js" --include "*.js.map" --cache-control "max-age=604800"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Upload assets"
+          aws s3 sync build s3://${BUCKET_NAME} --exclude "*.css" --exclude "*.js" --exclude "*.js.map" --exclude "*.html" --cache-control "max-age=604800"
+          echo "::endgroup::"
+
+          echo "::group::Upload html"
+          aws s3 sync build s3://${BUCKET_NAME} --exclude "*" --include "*.html" --cache-control "max-age=180, stale-while-revalidate=300"
+          echo "::endgroup::"
+
+      # Datadog error 추적을 위한 sourcemap upload
+      - name: Upload source maps
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: |
+          DATADOG_HASH_VERSION=$(git rev-parse --short HEAD)
+
+          echo "::group::Upload sourcemaps"
+          yarn datadog-ci sourcemaps upload ./build \
+            --service=office-web-prizm \
+            --release-version=${DATADOG_HASH_VERSION} \
+            --minified-path-prefix=${{ vars.APP_BASE_URL }} \
+            --repository-url=${{ github.event.repository.url }}
+          echo "::endgroup::"
+
+      # Update Deployment
+      - name: Update deployment status
+        if: ${{ always() }}
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          environment-url: ${{ steps.deployment.outputs.environment_url }}
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          state: ${{ job.status }}
+
+      - name: Slack Reaction - Finish
+        uses: archive/github-actions-slack@v2.6.0
+        if: ${{ always() }}
+        with:
+          slack-function: send-reaction
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-emoji-name: ${{ job.status == 'success' && 'github-check-mark' || 'github-changes-requested' }}
+          slack-message-timestamp: ${{ needs.prepare.outputs.SLACK_TS }}
+
+      - name: Slack Thread Message - Finish
+        uses: archive/github-actions-slack@master
+        if: ${{ always() }}
+        with:
+          slack-function: send-message
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          slack-text: ${{ format('Deployment is `{0}` {1}', job.status, job.status == 'success' && ':tada:' || ':heavy_exclamation_mark:') }}
+          slack-optional-thread_ts: ${{ needs.prepare.outputs.SLACK_TS }}

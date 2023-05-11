@@ -1,0 +1,60 @@
+feature-account:
+  - src/features/account/**/*
+feature-analytics:
+  - src/features/analytics/**/*
+feature-authentication:
+  - src/features/authentication/**/*
+feature-brands:
+  - src/features/brands/**/*
+feature-categories:
+  - src/features/categories/**/*
+feature-content:
+  - src/features/content/**/*
+feature-coupon:
+  - src/features/coupon/**/*
+feature-dashboard:
+  - src/features/dashboard/**/*
+feature-discover:
+  - src/features/discover/**/*
+feature-display:
+  - src/features/display/**/*
+feature-shortcut:
+  - src/features/shortcut/**/*
+feature-dormant:
+  - src/features/dormant/**/*
+feature-finance:
+  - src/features/finance/**/*
+feature-goods:
+  - src/features/goods/**/*
+feature-member:
+  - src/features/member/**/*
+feature-order:
+  - src/features/order/**/*
+feature-provider:
+  - src/features/provider/**/*
+feature-roles:
+  - src/features/roles/**/*
+feature-sales:
+  - src/features/sales/**/*
+feature-showroom:
+  - src/features/showroom/**/*
+feature-showtime:
+  - src/features/showtime/**/*
+feature-schedule-table:
+  - src/features/scheduleTable/**/*
+feature-raffle-event:
+  - src/features/raffleEvent/**/*
+common:
+  - any: ['src/**/*', '!src/features/**/*']
+configuration:
+  - commitlint.config.js
+  - craco.config.js
+  - package*.json
+  - propfile.js
+  - stylelint.config.js
+  - tsconfig.json
+  - tsconfig.paths.json
+  - .*/**
+  - environments/**/*
+documentation:
+  - '**/*.md'

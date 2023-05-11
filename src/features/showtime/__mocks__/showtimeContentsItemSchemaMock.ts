@@ -1,0 +1,55 @@
+import { ShowtimeContentsItemSchema } from '../schemas';
+
+export const showtimeContentsItemSchemaMock: ShowtimeContentsItemSchema = {
+  id: 6,
+  contentsType: 'STANDARD',
+  showRoomId: 1,
+  showRoomName: '나이키쇼룸',
+  title: '일반형 라이브 콘텐츠',
+  description: '일반형 라이브 콘텐츠에 오신걸 환영 합니다.',
+  liveChatId: 22,
+  liveChannelId: 79,
+  primaryImage: {
+    id: 540,
+    path: 'goods/20210907/7234115a-0ec3-49c1-b629-b4c8bacc0e9b',
+    extension: 'png',
+    width: 0,
+    height: 0,
+  },
+  contentsGoodsList: [
+    {
+      id: 138,
+      name: '21ss 나이키 반팔 티셔츠',
+      consumerPrice: { price: 30000 },
+      price: { price: 25000 },
+      primaryImage: {
+        id: 540,
+        path: 'goods/20210907/7234115a-0ec3-49c1-b629-b4c8bacc0e9b',
+        extension: 'png',
+        width: 0,
+        height: 0,
+      },
+    },
+    {
+      id: 139,
+      name: '21ss 나이키 가방',
+      consumerPrice: { price: 100000 },
+      price: { price: 90000 },
+      primaryImage: {
+        id: 540,
+        path: 'goods/20210907/7234115a-0ec3-49c1-b629-b4c8bacc0e9b',
+        extension: 'png',
+        width: 0,
+        height: 0,
+      },
+    },
+  ],
+  auctionGoodsList: [],
+  liveStartDate: '1627028340000',
+  livePlayTime: 140,
+  openStatus: 'PUBLIC',
+  guestShowRoomList: [],
+  pushTitle: null,
+  pushContents: null,
+  pipMode: true,
+};

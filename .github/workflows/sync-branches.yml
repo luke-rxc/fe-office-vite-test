@@ -1,0 +1,134 @@
+# Sync Develop
+#
+# master 브랜치에 push된 커밋을 develop, stage 브랜치에 동기화합니다.
+# 자동 merge 실패시 동기화를 위한 Pull Request를 생성합니다.
+name: Sync Branches
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    name: Syncing branches
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: Set Git Config
+        run: |
+          git config --local user.name 'github-actions[bot]'
+          git config --local user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Merge master to stage
+        id: auto_merge_stage
+        continue-on-error: true
+        run: |
+          git checkout stage
+          git pull origin stage
+          git merge --no-ff origin/master -m 'Auto-merge master to stage'
+
+      - name: Pushing to the protected branch 'stage'
+        if: steps.auto_merge_stage.outcome == 'success'
+        uses: CasperWA/push-protected@v2
+        with:
+          token: ${{ secrets.PROTECTED_BRANCH_PUSH_TOKEN }}
+          branch: stage
+
+      - name: Opening pull request for master to stage
+        if: steps.auto_merge_stage.outcome != 'success'
+        id: open_pr_stage
+        uses: tretuna/sync-branches@1.4.0
+        with:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          FROM_BRANCH: 'master'
+          TO_BRANCH: 'stage'
+
+      - name: Auto-merge stage notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "${{ vars.PLATFORM_TITLE }} Sync Branches",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":merged: *<${{ github.event.repository.url }}|${{ vars.PLATFORM_TITLE }}>* Sync Branches"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ format('Auto-merge *{0}* to *{1}* `{2}`!', 'master', 'stage', steps.auto_merge_stage.outcome) }}${{ steps.auto_merge_stage.outcome != 'success' && format('\nOpened Pull Request: {0}/pull/{1}', github.event.repository.url, steps.open_pr_stage.outputs.PULL_REQUEST_NUMBER) || '' }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+      - name: Merge master to develop
+        id: auto_merge_develop
+        continue-on-error: true
+        run: |
+          git checkout develop
+          git pull origin develop
+          git merge --no-ff origin/master -m 'Auto-merge master to develop'
+
+      - name: Pushing to the protected branch 'develop'
+        if: steps.auto_merge_develop.outcome == 'success'
+        uses: CasperWA/push-protected@v2
+        with:
+          token: ${{ secrets.PROTECTED_BRANCH_PUSH_TOKEN }}
+          branch: develop
+
+      - name: Opening pull request for master to develop
+        if: steps.auto_merge_develop.outcome != 'success'
+        id: open_pr_develop
+        uses: tretuna/sync-branches@1.4.0
+        with:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          FROM_BRANCH: 'master'
+          TO_BRANCH: 'develop'
+
+      - name: Auto-merge develop notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: ${{ vars.SLACK_DEPLOY_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "${{ vars.PLATFORM_TITLE }} Sync Branches",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":merged: *<${{ github.event.repository.url }}|${{ vars.PLATFORM_TITLE }}>* Sync Branches"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ format('Auto-merge *{0}* to *{1}* `{2}`!', 'master', 'develop', steps.auto_merge_develop.outcome) }}${{ steps.auto_merge_develop.outcome != 'success' && format('\nOpened Pull Request: {0}/pull/{1}', github.event.repository.url, steps.open_pr_develop.outputs.PULL_REQUEST_NUMBER) || '' }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
