@@ -30,43 +30,7 @@ jobs:
         id: escape-title
         run: echo pr_title=$(echo '${{ github.event.pull_request.title }}' | sed -e 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g') >> $GITHUB_OUTPUT
 
-      # Slack PR 알림을 전송합니다.
-      - name: Post to a Slack channel
-        id: slack-action
-        uses: slackapi/slack-github-action@v1
-        with:
-          channel-id: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          payload: |
-            {
-              "text": "${{ vars.PLATFORM_TITLE }} PR #${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "${{ vars.PULL_REQUEST_EMOJI }} *<${{ github.event.repository.url }}|${{ vars.PLATFORM_TITLE }}>* Pull Request"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": " *<${{ github.event.pull_request.html_url || github.event.head_commit.url }}|#${{ github.event.pull_request.number }} ${{ steps.escape-title.outputs.pr_title }}>* \n> *From:* `${{ github.head_ref }}` \n> *To:* `${{ github.base_ref }}` \n> *Commits:* ${{ github.event.pull_request.commits }} \n> *Action:* ${{ github.event.action }}"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "by: <@${{ steps.mapped-slack-id.outputs.author }}>"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      
 
       # CI 대상 브랜치 여부 매개변수를 설정합니다.
       - name: Check CI target branch
@@ -88,14 +52,7 @@ jobs:
     needs: slack
     if: needs.slack.outputs.CONTINUE == 'true'
     steps:
-      - name: Slack Reaction - Loading
-        uses: archive/github-actions-slack@v2.6.0
-        with:
-          slack-function: send-reaction
-          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          slack-emoji-name: githubloading
-          slack-message-timestamp: ${{ needs.slack.outputs.SLACK_TS }}
+      
 
       - uses: actions/checkout@v3
         with:
@@ -191,15 +148,7 @@ jobs:
         if: steps.yarn-cache.outputs.cache-hit != 'true'
         run: yarn install --frozen-lockfile
 
-      - name: Reaction at the end
-        if: ${{ failure() }}
-        uses: archive/github-actions-slack@v2.6.0
-        with:
-          slack-function: send-reaction
-          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          slack-emoji-name: heavy_exclamation_mark
-          slack-message-timestamp: ${{ needs.slack.outputs.SLACK_TS }}
+      
 
   # ES Lint
   eslint:
@@ -246,16 +195,6 @@ jobs:
       - name: Run eslint
         run: yarn run lint
 
-      - name: Reaction at the end
-        if: ${{ always() }}
-        uses: archive/github-actions-slack@v2.6.0
-        with:
-          slack-function: send-reaction
-          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          slack-emoji-name: ${{ job.status == 'success' && 'eslint' || 'heavy_exclamation_mark' }}
-          slack-message-timestamp: ${{ needs.slack.outputs.SLACK_TS }}
-
   # Type 체크
   tsc:
     runs-on: ubuntu-latest
@@ -300,27 +239,3 @@ jobs:
 
       - name: Run type check
         run: yarn run type-check
-
-      - name: Reaction at the end
-        if: ${{ always() }}
-        uses: archive/github-actions-slack@v2.6.0
-        with:
-          slack-function: send-reaction
-          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          slack-emoji-name: ${{ job.status == 'success' && 'typescript' || 'heavy_exclamation_mark' }}
-          slack-message-timestamp: ${{ needs.slack.outputs.SLACK_TS }}
-
-  finish:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [slack, prepare, caching-dependencies, eslint, tsc]
-    steps:
-      - name: Slack Reaction - Finished
-        uses: archive/github-actions-slack@v2.6.0
-        with:
-          slack-function: send-reaction
-          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.SLACK_PR_CHANNEL_ID }}
-          slack-emoji-name: ${{ contains(join(needs.*.result, ','), 'failure') && 'github-changes-requested' || 'github-check-mark' }}
-          slack-message-timestamp: ${{ needs.slack.outputs.SLACK_TS }}
